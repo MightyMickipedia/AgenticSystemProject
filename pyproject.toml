@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "calendar-optimizer"
+version = "0.1.0"
+description = "Read-only agentic weekly calendar optimizer using local Ollama models"
+requires-python = ">=3.11"
+dependencies = [
+    "agent-squad==1.0.2",
+    "google-api-python-client>=2.120.0",
+    "google-auth-oauthlib>=1.2.0",
+    "openai>=1.50.0",
+    "pydantic>=2.7.0",
+    "tzdata>=2024.1",
+]
+
+[project.scripts]
+calendar-optimizer = "calendar_optimizer.run:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
