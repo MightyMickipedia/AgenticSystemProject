@@ -18,6 +18,7 @@ from calendar_optimizer.agents.base import (
     OllamaToolAgent,
     OllamaToolAgentOptions,
 )
+from calendar_optimizer.agents.flow import flow
 from calendar_optimizer.agents.hr_planner import build_hr_planner
 from calendar_optimizer.agents.schedule_manager import build_schedule_manager
 from calendar_optimizer.agents.traffic_optimizer import build_traffic_optimizer
@@ -69,6 +70,8 @@ class DeterministicOrchestratorClassifier(Classifier):
     ) -> ClassifierResult:
         del input_text, chat_history
         selected = next(iter(self.agents.values()), None)
+        if selected:
+            flow(f"Agent Squad -> {selected.name}: Anfrage geroutet")
         return ClassifierResult(selected_agent=selected, confidence=1.0)
 
 
@@ -115,15 +118,21 @@ class CalendarOrchestratorAgent(Agent):
         additional_params: Optional[dict[str, Any]] = None,
     ) -> ConversationMessage:
         del input_text, chat_history, additional_params
+        flow(f"{self.name} arbeitet")
         task = (
             "Analysiere die Kalenderwoche ab "
             f"{self.calendar.week_start.isoformat()} ausgewogen und vollständig."
+        )
+        flow(
+            f"{self.name} -> Schedule Manager, HR Planner, Traffic Optimizer: "
+            "Woche parallel analysieren"
         )
         schedule_response, hr_response, traffic_response = await asyncio.gather(
             self.schedule_manager.process_request(task, user_id, session_id, []),
             self.hr_planner.process_request(task, user_id, session_id, []),
             self.traffic_optimizer.process_request(task, user_id, session_id, []),
         )
+        flow(f"Schedule Manager, HR Planner, Traffic Optimizer -> {self.name}: Ergebnisse erhalten")
 
         try:
             variants = self._parse_variants(schedule_response)
@@ -139,10 +148,35 @@ class CalendarOrchestratorAgent(Agent):
 
         valid_variants: list[OptimizationVariant] = []
         rejected: list[RejectedProposal] = []
+        discarded_conflicting_variants: list[str] = []
         for variant in variants:
             valid, variant_rejected = self.calendar.validate_variant(variant)
-            valid_variants.append(valid)
             rejected.extend(variant_rejected)
+            resulting_calendar = self.calendar.apply_variant(valid)
+            if resulting_calendar.conflict_pairs():
+                discarded_conflicting_variants.append(valid.name)
+                flow(
+                    f"{self.name}: Variante '{valid.name}' verworfen, "
+                    "da Terminkonflikte verbleiben"
+                )
+                continue
+            valid_variants.append(valid)
+
+        used_conflict_fallback = False
+        if not valid_variants:
+            flow(
+                f"{self.name}: Agenten lieferten keine konfliktfreie Variante; "
+                "deterministische Konfliktauflösung wird erzeugt"
+            )
+            fallback = self.calendar.build_conflict_resolution_variant()
+            if self.calendar.apply_variant(fallback).conflict_pairs():
+                raise RuntimeError("Konfliktfreie Empfehlung konnte nicht garantiert werden.")
+            valid_variants.append(fallback)
+            used_conflict_fallback = True
+        flow(
+            f"{self.name}: {len(valid_variants)} Varianten validiert, "
+            f"{len(rejected)} Vorschläge verworfen"
+        )
 
         deterministic_traffic = tuple(
             (
@@ -166,22 +200,42 @@ class CalendarOrchestratorAgent(Agent):
             },
             ensure_ascii=False,
         )
+        system_notes: list[str] = []
+        if discarded_conflicting_variants:
+            system_notes.append(
+                "Varianten mit verbleibenden Terminkonflikten wurden verworfen: "
+                + ", ".join(discarded_conflicting_variants)
+                + "."
+            )
+        if used_conflict_fallback:
+            system_notes.append(
+                "Die Empfehlung wurde deterministisch erzeugt, weil keine Agentenvariante "
+                "alle bestehenden Konflikte auflöste."
+            )
         notes: tuple[str, ...] = ()
         selected_name = valid_variants[0].name
         try:
+            flow(f"{self.name} -> {self.lead_agent.name}: beste Variante auswählen")
             selection = await self.lead_agent.process_request(
                 selection_input, user_id, session_id, []
             )
+            flow(f"{self.lead_agent.name} -> {self.name}: Auswahl erhalten")
             selection_payload = _extract_json(_message_text(selection))
             selected_name = str(selection_payload.get("recommended_variant", selected_name))
-            notes = tuple(str(item) for item in selection_payload.get("notes", []))
+            notes = tuple(
+                (*system_notes, *(str(item) for item in selection_payload.get("notes", [])))
+            )
         except (json.JSONDecodeError, TypeError, ValueError, RuntimeError):
-            notes = ("Die erste valide Variante wurde als deterministischer Fallback gewählt.",)
+            notes = tuple(
+                (*system_notes, "Die erste valide Variante wurde als deterministischer Fallback gewählt.")
+            )
 
         recommended = next(
             (variant for variant in valid_variants if variant.name == selected_name),
             valid_variants[0],
         )
+        if self.calendar.apply_variant(recommended).conflict_pairs():
+            raise RuntimeError("Konfliktfreie Empfehlung konnte nicht garantiert werden.")
         alternatives = tuple(
             variant for variant in valid_variants if variant.name != recommended.name
         )
@@ -196,6 +250,8 @@ class CalendarOrchestratorAgent(Agent):
             notes=notes,
         )
         self.last_report = report
+        flow(f"{self.name}: Empfehlung '{recommended.name}' gewählt")
+        flow(f"{self.name} hat die Arbeit abgeschlossen")
         return ConversationMessage(
             role=ParticipantRole.ASSISTANT.value,
             content=[{"text": report.model_dump_json()}],

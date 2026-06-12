@@ -178,6 +178,14 @@ class WeeklyCalendar(FrozenModel):
         )
 
     def free_slots(self, day: date, minimum_minutes: int = 30) -> tuple[TimeSlot, ...]:
+        return self.free_slots_excluding(day, minimum_minutes)
+
+    def free_slots_excluding(
+        self,
+        day: date,
+        minimum_minutes: int = 30,
+        exclude_event_id: str | None = None,
+    ) -> tuple[TimeSlot, ...]:
         window_start = datetime.combine(day, self.day_start, self.zone)
         window_end = datetime.combine(day, self.day_end, self.zone)
         busy = sorted(
@@ -186,7 +194,8 @@ class WeeklyCalendar(FrozenModel):
                 min(event.end.astimezone(self.zone), window_end),
             )
             for event in self.events_on(day)
-            if not event.all_day
+            if event.id != exclude_event_id
+            and not event.all_day
             and event.start < window_end
             and event.end > window_start
         )
@@ -200,6 +209,22 @@ class WeeklyCalendar(FrozenModel):
         if window_end > cursor and (window_end - cursor) >= timedelta(minutes=minimum_minutes):
             slots.append(TimeSlot(start=cursor, end=window_end))
         return tuple(slots)
+
+    def conflict_pairs(self) -> tuple[tuple[str, str], ...]:
+        """Return every overlapping pair of timed events exactly once."""
+
+        timed_events = sorted(
+            (event for event in self.events if not event.all_day),
+            key=lambda event: event.start,
+        )
+        conflicts: list[tuple[str, str]] = []
+        for index, first in enumerate(timed_events):
+            for second in timed_events[index + 1 :]:
+                if second.start >= first.end:
+                    break
+                if first.start < second.end:
+                    conflicts.append((first.id, second.id))
+        return tuple(conflicts)
 
     def conflict_ids(
         self,
@@ -256,6 +281,66 @@ class WeeklyCalendar(FrozenModel):
             for event in self.events
         )
         return self.model_copy(update={"events": tuple(sorted(moved, key=lambda item: item.start))})
+
+    def apply_variant(self, variant: OptimizationVariant) -> WeeklyCalendar:
+        """Apply already validated advisory moves to an immutable copy."""
+
+        calendar = self
+        for proposal in variant.proposals:
+            calendar = calendar.with_move(proposal)
+        return calendar
+
+    def build_conflict_resolution_variant(self) -> OptimizationVariant:
+        """Deterministically propose moves until no timed event overlaps remain."""
+
+        calendar = self
+        proposals: list[MoveProposal] = []
+        max_moves = len(self.events)
+        while calendar.conflict_pairs():
+            if len(proposals) >= max_moves:
+                raise RuntimeError("Bestehende Terminkonflikte konnten nicht aufgelöst werden.")
+
+            first_id, second_id = calendar.conflict_pairs()[0]
+            event = calendar.event_by_id(second_id)
+            if event is None:
+                raise RuntimeError("Konflikt referenziert einen unbekannten Termin.")
+
+            duration = event.duration_minutes
+            candidates: list[TimeSlot] = []
+            for day_offset in range(7):
+                day = self.week_start + timedelta(days=day_offset)
+                candidates.extend(
+                    calendar.free_slots_excluding(
+                        day,
+                        minimum_minutes=duration,
+                        exclude_event_id=event.id,
+                    )
+                )
+            candidates.sort(
+                key=lambda slot: abs((slot.start - event.start).total_seconds())
+            )
+            if not candidates:
+                raise RuntimeError(
+                    f"Kein konfliktfreier Zeitslot für Termin '{event.title}' verfügbar."
+                )
+
+            slot = candidates[0]
+            proposal = MoveProposal(
+                event_id=event.id,
+                new_start=slot.start,
+                new_end=slot.start + timedelta(minutes=duration),
+                reason=f"Bestehenden Terminkonflikt mit {first_id} auflösen.",
+                flexibility=Flexibility.UNCERTAIN,
+                confidence=0.5,
+            )
+            calendar = calendar.with_move(proposal)
+            proposals.append(proposal)
+
+        return OptimizationVariant(
+            name="Garantierte Konfliktauflösung",
+            summary="Deterministisch erzeugte Variante, die alle bestehenden Überschneidungen auflöst.",
+            proposals=tuple(proposals),
+        )
 
     def validate_variant(
         self, variant: OptimizationVariant

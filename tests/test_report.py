@@ -15,3 +15,4 @@ def test_report_explicitly_states_read_only(calendar: WeeklyCalendar) -> None:
     output = render_markdown(calendar, report)
     assert "Es wurden keine Änderungen am Kalender vorgenommen" in output
     assert "calendar.events.readonly" in output
+    assert "garantiert frei von Terminüberschneidungen" in output

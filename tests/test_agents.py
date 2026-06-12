@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -15,7 +16,7 @@ from calendar_optimizer.agents.base import (
     OllamaToolAgentOptions,
 )
 from calendar_optimizer.agents.orchestrator import build_agent_squad
-from calendar_optimizer.domain.calendar import WeeklyCalendar
+from calendar_optimizer.domain.calendar import CalendarEvent, WeeklyCalendar
 
 
 def completion(content: str = "", tool_calls: list[Any] | None = None) -> Any:
@@ -132,7 +133,7 @@ def test_foreign_model_is_rejected() -> None:
         build_agent(QueueClient([]), model="foreign-model")
 
 
-def test_ollama_agent_executes_tool_call() -> None:
+def test_ollama_agent_executes_tool_call(capsys: pytest.CaptureFixture[str]) -> None:
     def echo(value: str) -> str:
         return value
 
@@ -150,9 +151,17 @@ def test_ollama_agent_executes_tool_call() -> None:
     assert response.content[0]["text"] == '{"result":"ok"}'
     messages = client.chat.completions.requests[1]["messages"]
     assert messages[-1] == {"role": "tool", "tool_call_id": "call-1", "content": "ok"}
+    output = capsys.readouterr().out
+    assert "[FLOW] Test Agent arbeitet mit llama3.1:8b" in output
+    assert "[FLOW] Test Agent -> Tool echo:" in output
+    assert "[FLOW] Tool echo -> Test Agent: Ergebnis erhalten" in output
+    assert "[FLOW] Test Agent hat die Arbeit abgeschlossen" in output
 
 
-def test_full_agent_squad_flow_validates_proposals(calendar: WeeklyCalendar) -> None:
+def test_full_agent_squad_flow_validates_proposals(
+    calendar: WeeklyCalendar,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     squad, orchestrator = build_agent_squad(calendar, client=RoutedClient())
     response = asyncio.run(squad.route_request("Optimiere", "user", "session"))
     assert response.metadata.agent_name == "Calendar Orchestrator"
@@ -160,3 +169,36 @@ def test_full_agent_squad_flow_validates_proposals(calendar: WeeklyCalendar) -> 
     assert orchestrator.last_report.recommended_variant.name == "Ausgewogen"
     assert len(orchestrator.last_report.rejected_proposals) == 1
     assert orchestrator.last_report.hr_warnings == ("Mittagspause prüfen.",)
+    output = capsys.readouterr().out
+    assert "[FLOW] Agent Squad -> Calendar Orchestrator: Anfrage geroutet" in output
+    assert "Woche parallel analysieren" in output
+    assert "Schedule Manager, HR Planner, Traffic Optimizer -> Calendar Orchestrator" in output
+    assert "1 Vorschläge verworfen" in output
+    assert "Empfehlung 'Ausgewogen' gewählt" in output
+
+
+def test_orchestrator_falls_back_to_conflict_free_variant() -> None:
+    calendar = WeeklyCalendar(
+        week_start=date(2026, 6, 8),
+        timezone="Europe/Berlin",
+        events=(
+            CalendarEvent(
+                id="first",
+                title="First",
+                start=datetime.fromisoformat("2026-06-08T10:00:00+02:00"),
+                end=datetime.fromisoformat("2026-06-08T11:00:00+02:00"),
+            ),
+            CalendarEvent(
+                id="second",
+                title="Second",
+                start=datetime.fromisoformat("2026-06-08T10:30:00+02:00"),
+                end=datetime.fromisoformat("2026-06-08T11:30:00+02:00"),
+            ),
+        ),
+    )
+    squad, orchestrator = build_agent_squad(calendar, client=RoutedClient())
+    asyncio.run(squad.route_request("Optimiere", "user", "conflict-session"))
+    assert orchestrator.last_report is not None
+    recommendation = orchestrator.last_report.recommended_variant
+    assert recommendation.name == "Garantierte Konfliktauflösung"
+    assert calendar.apply_variant(recommendation).conflict_pairs() == ()

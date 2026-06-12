@@ -5,6 +5,7 @@ __pycache__/
 .secrets/
 credentials.json
 reports/
+snapshots/
 dist/
 build/
 *.egg-info/

@@ -33,3 +33,9 @@ def test_calendar_tools_are_read_only(calendar: WeeklyCalendar) -> None:
     )
     assert len(json.loads(result)) == 2
     assert calendar.model_dump_json() == before
+
+
+def test_list_events_accepts_filter_by_date_alias(calendar: WeeklyCalendar) -> None:
+    tools = {tool.name: tool for tool in build_calendar_tools(calendar)}
+    result = asyncio.run(tools["list_events"].func(filter_by_date="2026-06-08"))
+    assert [event["id"] for event in json.loads(result)] == ["meeting", "online"]

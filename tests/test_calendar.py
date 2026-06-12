@@ -5,6 +5,7 @@ from datetime import date, datetime
 import pytest
 
 from calendar_optimizer.domain.calendar import (
+    CalendarEvent,
     Flexibility,
     MoveProposal,
     OptimizationVariant,
@@ -121,3 +122,28 @@ def test_variant_rejects_duplicate_move(calendar: WeeklyCalendar) -> None:
     )
     assert variant.proposals == (first,)
     assert "nur einmal" in rejected[0].reason
+
+
+def test_conflict_resolution_variant_is_guaranteed_conflict_free() -> None:
+    calendar = WeeklyCalendar(
+        week_start=date(2026, 6, 8),
+        timezone="Europe/Berlin",
+        events=(
+            CalendarEvent(
+                id="first",
+                title="First",
+                start=datetime.fromisoformat("2026-06-08T10:00:00+02:00"),
+                end=datetime.fromisoformat("2026-06-08T11:00:00+02:00"),
+            ),
+            CalendarEvent(
+                id="second",
+                title="Second",
+                start=datetime.fromisoformat("2026-06-08T10:30:00+02:00"),
+                end=datetime.fromisoformat("2026-06-08T11:30:00+02:00"),
+            ),
+        ),
+    )
+    assert calendar.conflict_pairs() == (("first", "second"),)
+    variant = calendar.build_conflict_resolution_variant()
+    assert variant.proposals
+    assert calendar.apply_variant(variant).conflict_pairs() == ()

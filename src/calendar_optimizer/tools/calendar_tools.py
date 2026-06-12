@@ -61,8 +61,13 @@ def analyze_transitions(calendar: WeeklyCalendar) -> list[dict[str, Any]]:
 def build_calendar_tools(calendar: WeeklyCalendar) -> list[AgentTool]:
     """Create read-only Agent Squad tools bound to one immutable calendar."""
 
-    def list_events(day: str = "") -> str:
-        selected = calendar.events_on(date.fromisoformat(day)) if day else calendar.events
+    def list_events(day: str = "", filter_by_date: str = "") -> str:
+        selected_date = day or filter_by_date
+        selected = (
+            calendar.events_on(date.fromisoformat(selected_date))
+            if selected_date
+            else calendar.events
+        )
         return json.dumps(
             [event.model_dump(mode="json") for event in selected],
             ensure_ascii=False,
@@ -98,11 +103,26 @@ def build_calendar_tools(calendar: WeeklyCalendar) -> list[AgentTool]:
     def travel_warnings() -> str:
         return json.dumps(analyze_transitions(calendar), ensure_ascii=False)
 
+    def list_conflicts() -> str:
+        return json.dumps(
+            [
+                {"first_event_id": first, "second_event_id": second}
+                for first, second in calendar.conflict_pairs()
+            ],
+            ensure_ascii=False,
+        )
+
     return [
         AgentTool(
             name="list_events",
             description="List calendar events. Optionally filter by ISO date.",
-            properties={"day": {"type": "string", "description": "ISO date or empty string"}},
+            properties={
+                "day": {"type": "string", "description": "ISO date or empty string"},
+                "filter_by_date": {
+                    "type": "string",
+                    "description": "Alias for day; ISO date or empty string",
+                },
+            },
             required=[],
             func=list_events,
         ),
@@ -133,6 +153,13 @@ def build_calendar_tools(calendar: WeeklyCalendar) -> list[AgentTool]:
             },
             required=["event_id", "new_start", "new_end"],
             func=check_conflict,
+        ),
+        AgentTool(
+            name="list_conflicts",
+            description="List all existing overlapping timed event pairs.",
+            properties={},
+            required=[],
+            func=list_conflicts,
         ),
         AgentTool(
             name="travel_warnings",

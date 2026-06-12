@@ -54,6 +54,9 @@ def _variant_section(calendar: WeeklyCalendar, variant: OptimizationVariant) -> 
 def render_markdown(calendar: WeeklyCalendar, report: OptimizationReport) -> str:
     """Render a human-readable, explicitly non-mutating optimization report."""
 
+    original_conflicts = calendar.conflict_pairs()
+    recommended_calendar = calendar.apply_variant(report.recommended_variant)
+    remaining_conflicts = recommended_calendar.conflict_pairs()
     lines = [
         f"# Kalenderoptimierung: Woche ab {report.week_start.isoformat()}",
         "",
@@ -83,6 +86,22 @@ def render_markdown(calendar: WeeklyCalendar, report: OptimizationReport) -> str
 
     lines.extend(["", "## Empfehlung", ""])
     lines.extend(_variant_section(calendar, report.recommended_variant))
+
+    lines.extend(["", "## Terminkonflikte", ""])
+    if original_conflicts:
+        lines.append(
+            f"- Im Ist-Kalender wurden {len(original_conflicts)} Überschneidungen erkannt."
+        )
+        lines.extend(
+            f"- Konflikt: `{first}` überschneidet sich mit `{second}`."
+            for first, second in original_conflicts
+        )
+    else:
+        lines.append("- Im Ist-Kalender wurden keine Überschneidungen erkannt.")
+    if remaining_conflicts:
+        lines.append("- **Fehler: Die Empfehlung enthält weiterhin Terminkonflikte.**")
+    else:
+        lines.append("- Die empfohlene Variante ist garantiert frei von Terminüberschneidungen.")
 
     lines.extend(["", "## Menschliche Machbarkeit", ""])
     lines.extend(

@@ -10,6 +10,8 @@ from agent_squad.agents import Agent, AgentOptions
 from agent_squad.types import ConversationMessage, ParticipantRole
 from agent_squad.utils import AgentTool
 
+from calendar_optimizer.agents.flow import flow, summarize_arguments
+
 QWEN_MODEL = "qwen2.5:14b-instruct-q5_K_M"
 LLAMA_MODEL = "llama3.1:8b"
 ALLOWED_MODELS = frozenset((QWEN_MODEL, LLAMA_MODEL))
@@ -60,14 +62,18 @@ class OllamaToolAgent(Agent):
         return {"role": role, "content": text}
 
     async def _execute_tool(self, name: str, arguments: str) -> str:
+        flow(f"{self.name} -> Tool {name}: {summarize_arguments(arguments or '{}')}")
         tool = next((candidate for candidate in self.tools if candidate.name == name), None)
         if tool is None:
+            flow(f"Tool {name} -> {self.name}: Tool nicht gefunden")
             return json.dumps({"error": f"Unbekanntes Tool: {name}"})
         try:
             values = json.loads(arguments or "{}")
             result = await tool.func(**values)
+            flow(f"Tool {name} -> {self.name}: Ergebnis erhalten")
             return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
         except Exception as error:  # Tool errors must be visible to the model.
+            flow(f"Tool {name} -> {self.name}: Fehler: {error}")
             return json.dumps({"error": str(error)}, ensure_ascii=False)
 
     async def process_request(
@@ -79,6 +85,7 @@ class OllamaToolAgent(Agent):
         additional_params: Optional[dict[str, Any]] = None,
     ) -> ConversationMessage:
         del user_id, session_id, additional_params
+        flow(f"{self.name} arbeitet mit {self.model}")
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.system_prompt},
             *(self._history_message(message) for message in chat_history),
@@ -104,6 +111,7 @@ class OllamaToolAgent(Agent):
             tool_calls = message.tool_calls or []
             if not tool_calls:
                 content = message.content or ""
+                flow(f"{self.name} hat die Arbeit abgeschlossen")
                 return ConversationMessage(
                     role=ParticipantRole.ASSISTANT.value,
                     content=[{"text": content}],
