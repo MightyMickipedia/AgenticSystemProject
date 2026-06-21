@@ -7,10 +7,9 @@ Verschieben oder Löschen von Google-Kalenderterminen.
 
 ## Starten
 
-Der empfohlene Start erfolgt im Projekt-Root:
+### CLI (Kommandozeile)
 
 ```powershell
-cd C:\Users\Windoofpedia\Desktop\uni\AgenticSystemProject
 python -m pip install -r requirements-dev.txt
 python -m pip install -e .
 python -m calendar_optimizer.run
@@ -22,28 +21,65 @@ Nach dem Editable-Install funktioniert dieser Modulaufruf auch aus anderen Verze
 die Standardpfade für `credentials.json`, `.secrets`, `snapshots` und `reports` zeigen weiterhin
 auf den Projekt-Root.
 
-Der Standardlauf versucht, die aktuelle Woche aus Google Calendar zu importieren. Für den ersten
-Google-Import muss `credentials.json` im Projekt-Root liegen. Falls bereits ein Snapshot existiert,
-wird dieser bei fehlender Authentifizierung automatisch verwendet. Ollama muss in beiden Fällen mit
-den benötigten Modellen gestartet sein.
+### Web-Interface
 
-Während des Laufs zeigt die Konsole den Agentenflow an:
+Das Projekt enthält eine vollständige Weboberfläche mit React-Frontend und FastAPI-Backend.
 
-```text
-[FLOW] Agent Squad -> Calendar Orchestrator: Anfrage geroutet
-[FLOW] Calendar Orchestrator -> Schedule Manager, HR Planner, Traffic Optimizer: Woche parallel analysieren
-[FLOW] Schedule Manager arbeitet mit qwen2.5:14b-instruct-q5_K_M
-[FLOW] Schedule Manager -> Tool list_events: {}
-[FLOW] Tool list_events -> Schedule Manager: Ergebnis erhalten
-[FLOW] Calendar Orchestrator: Empfehlung 'Ausgewogen' gewählt
+**Backend starten:**
+
+```powershell
+python -m pip install -e .
+python -m calendar_optimizer.web
 ```
+
+Das Backend läuft auf **http://localhost:8000**.
+
+**Frontend starten (Entwicklung):**
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Der Vite-Devserver läuft auf **http://localhost:5173** und leitet API-Aufrufe automatisch
+an das Backend weiter.
+
+**Webseite öffnen:** [http://localhost:5173](http://localhost:5173)
+
+**Produktionsbetrieb (einzelner Port):**
+
+```powershell
+cd frontend
+npm run build
+cd ..
+python -m calendar_optimizer.web
+```
+
+Im Produktionsmodus liefert FastAPI das gebaute Frontend direkt aus.
+
+**Webseite öffnen:** [http://localhost:8000](http://localhost:8000)
+
+### Voraussetzungen
+
+- Python 3.11+
+- [Ollama](https://ollama.com/) mit den Modellen `llama3.1:8b` und `qwen2.5:14b-instruct-q5_K_M`
+- Node.js 18+ (nur für Frontend-Entwicklung)
+
+```powershell
+ollama pull llama3.1:8b
+ollama pull qwen2.5:14b-instruct-q5_K_M
+ollama serve
+```
+
+Ollama muss unter `http://localhost:11434` erreichbar sein. Sämtliche LLM-Aufrufe bleiben lokal.
 
 ## Google-Authentifizierung und Snapshot-Fallback
 
 Für den Google-Import:
 
 1. Google Calendar API im Google-Cloud-Projekt aktivieren.
-2. Einen OAuth-Client vom Typ „Desktop-App“ erstellen.
+2. Einen OAuth-Client vom Typ „Desktop-App" erstellen.
 3. Die heruntergeladene Datei als `credentials.json` im Projekt-Root ablegen.
 4. Die eigene Google-Adresse beim OAuth-Testmodus als Testnutzer eintragen.
 5. `python -m calendar_optimizer.run` starten und den Browser-Dialog bestätigen.
@@ -93,23 +129,6 @@ ausgeschlossen.
 Andere Modellnamen werden zur Laufzeit abgelehnt. Der eingebaute Agent-Squad-Supervisor wird
 nicht verwendet, weil er keine lokalen OpenAI-kompatiblen Ollama-Agenten unterstützt. Agent Squad
 routet stattdessen deterministisch zum validierenden Orchestrator.
-
-## Installation
-
-Voraussetzungen: Python 3.11 oder neuer sowie [Ollama](https://ollama.com/).
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements-dev.txt
-python -m pip install -e .
-
-ollama pull qwen2.5:14b-instruct-q5_K_M
-ollama pull llama3.1:8b
-ollama serve
-```
-
-Ollama muss unter `http://localhost:11434` erreichbar sein. Sämtliche LLM-Aufrufe bleiben lokal.
 
 ## Demo mit JSON
 
@@ -163,3 +182,13 @@ pytest
 
 Die Tests verwenden gemockte LLM- und Google-Antworten. Ein manueller Smoke-Test mit Ollama und
 Google OAuth ist optional.
+
+
+
+
+
+
+
+
+
+
