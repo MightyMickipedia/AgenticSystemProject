@@ -68,29 +68,29 @@ class RoutedCompletions:
             payload = {
                 "variants": [
                     {
-                        "name": "Ausgewogen",
-                        "summary": "Ein Fokusblock wird verschoben.",
+                        "name": "Balanced",
+                        "summary": "One focus block is moved.",
                         "proposals": [
                             {
                                 "event_id": "meeting",
                                 "new_start": "2026-06-08T13:00:00+02:00",
                                 "new_end": "2026-06-08T14:00:00+02:00",
-                                "reason": "Mehr Fokus am Vormittag",
+                                "reason": "More focus in the morning",
                                 "flexibility": "uncertain",
                                 "confidence": 0.6,
                             }
                         ],
                     },
-                    {"name": "Ruhig", "summary": "Status quo", "proposals": []},
+                    {"name": "Calm", "summary": "Status quo", "proposals": []},
                     {
-                        "name": "Ungültig",
-                        "summary": "Kollision",
+                        "name": "Invalid",
+                        "summary": "Collision",
                         "proposals": [
                             {
                                 "event_id": "meeting",
                                 "new_start": "2026-06-08T11:30:00+02:00",
                                 "new_end": "2026-06-08T12:30:00+02:00",
-                                "reason": "Kollidiert",
+                                "reason": "Collides",
                                 "flexibility": "uncertain",
                                 "confidence": 0.4,
                             }
@@ -98,15 +98,15 @@ class RoutedCompletions:
                     },
                 ]
             }
-        elif "menschliche Machbarkeit" in system:
-            payload = {"warnings": ["Mittagspause prüfen."]}
-        elif "Ortswechsel" in system:
-            payload = {"warnings": ["Übergang zwischen Präsenz und Online ist knapp."]}
-        else:
+        elif "recommended_variant" in system:
             payload = {
-                "recommended_variant": "Ausgewogen",
-                "notes": ["Ausgewogene Variante gewählt."],
+                "recommended_variant": "Balanced",
+                "notes": ["Balanced variant selected."],
             }
+        elif "physical load" in system:
+            payload = {"warnings": ["Check the lunch break."]}
+        else:
+            payload = {"warnings": ["Transition between on-site and online is tight."]}
         return completion(json.dumps(payload, ensure_ascii=False))
 
 
@@ -129,7 +129,7 @@ def build_agent(client: Any, tools: list[AgentTool] | None = None, model: str = 
 
 
 def test_foreign_model_is_rejected() -> None:
-    with pytest.raises(ValueError, match="nicht erlaubt"):
+    with pytest.raises(ValueError, match="is not allowed"):
         build_agent(QueueClient([]), model="foreign-model")
 
 
@@ -152,10 +152,10 @@ def test_ollama_agent_executes_tool_call(capsys: pytest.CaptureFixture[str]) -> 
     messages = client.chat.completions.requests[1]["messages"]
     assert messages[-1] == {"role": "tool", "tool_call_id": "call-1", "content": "ok"}
     output = capsys.readouterr().out
-    assert "[FLOW] Test Agent arbeitet mit llama3.1:8b" in output
+    assert "[FLOW] Test Agent working with llama3.1:8b" in output
     assert "[FLOW] Test Agent -> Tool echo:" in output
-    assert "[FLOW] Tool echo -> Test Agent: Ergebnis erhalten" in output
-    assert "[FLOW] Test Agent hat die Arbeit abgeschlossen" in output
+    assert "[FLOW] Tool echo -> Test Agent: result received" in output
+    assert "[FLOW] Test Agent finished its work" in output
 
 
 def test_full_agent_squad_flow_validates_proposals(
@@ -166,15 +166,59 @@ def test_full_agent_squad_flow_validates_proposals(
     response = asyncio.run(squad.route_request("Optimiere", "user", "session"))
     assert response.metadata.agent_name == "Calendar Orchestrator"
     assert orchestrator.last_report is not None
-    assert orchestrator.last_report.recommended_variant.name == "Ausgewogen"
+    assert orchestrator.last_report.recommended_variant.name == "Balanced"
     assert len(orchestrator.last_report.rejected_proposals) == 1
-    assert orchestrator.last_report.hr_warnings == ("Mittagspause prüfen.",)
+    assert orchestrator.last_report.hr_warnings == ("Check the lunch break.",)
+    assert any(
+        "Meeting" in recommendation and "Online Sync" in recommendation
+        for recommendation in orchestrator.last_report.human_recommendations
+    )
+    assert not any(
+        "mon-client-call" in recommendation
+        for recommendation in orchestrator.last_report.human_recommendations
+    )
     output = capsys.readouterr().out
-    assert "[FLOW] Agent Squad -> Calendar Orchestrator: Anfrage geroutet" in output
-    assert "Woche parallel analysieren" in output
+    assert "[FLOW] Agent Squad -> Calendar Orchestrator: request routed" in output
+    assert "analyze the week in parallel" in output
     assert "Schedule Manager, HR Planner, Traffic Optimizer -> Calendar Orchestrator" in output
-    assert "1 Vorschläge verworfen" in output
-    assert "Empfehlung 'Ausgewogen' gewählt" in output
+    assert "1 proposals discarded" in output
+    assert "recommendation 'Balanced' selected" in output
+
+
+def test_human_recommendations_use_event_titles_instead_of_ids() -> None:
+    calendar = WeeklyCalendar(
+        week_start=date(2026, 6, 8),
+        timezone="Europe/Berlin",
+        events=(
+            CalendarEvent(
+                id="mon-client-call",
+                title="Client Call",
+                start=datetime.fromisoformat("2026-06-08T09:00:00+02:00"),
+                end=datetime.fromisoformat("2026-06-08T10:00:00+02:00"),
+                location="Office Room 1",
+            ),
+            CalendarEvent(
+                id="mon-training",
+                title="Team Training",
+                start=datetime.fromisoformat("2026-06-08T10:00:00+02:00"),
+                end=datetime.fromisoformat("2026-06-08T11:00:00+02:00"),
+                location="Conference Room A",
+            ),
+        ),
+    )
+    squad, orchestrator = build_agent_squad(calendar, client=RoutedClient())
+    asyncio.run(squad.route_request("Optimiere", "user", "title-session"))
+    assert orchestrator.last_report is not None
+
+    recommendations = "\n".join(orchestrator.last_report.human_recommendations)
+    traffic = "\n".join(orchestrator.last_report.traffic_warnings)
+
+    assert "Client Call" in recommendations
+    assert "Team Training" in recommendations
+    assert "mon-client-call" not in recommendations
+    assert "mon-training" not in recommendations
+    assert "mon-client-call" not in traffic
+    assert "mon-training" not in traffic
 
 
 def test_orchestrator_falls_back_to_conflict_free_variant() -> None:
@@ -200,5 +244,7 @@ def test_orchestrator_falls_back_to_conflict_free_variant() -> None:
     asyncio.run(squad.route_request("Optimiere", "user", "conflict-session"))
     assert orchestrator.last_report is not None
     recommendation = orchestrator.last_report.recommended_variant
-    assert recommendation.name == "Garantierte Konfliktauflösung"
+    all_variants = (recommendation, *orchestrator.last_report.alternatives)
+    assert len(all_variants) >= 2
     assert calendar.apply_variant(recommendation).conflict_pairs() == ()
+    assert all(calendar.apply_variant(variant).conflict_pairs() == () for variant in all_variants)

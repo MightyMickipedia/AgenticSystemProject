@@ -114,7 +114,7 @@ def load_google_calendar(
         from googleapiclient.discovery import build
     except ImportError as error:
         raise RuntimeError(
-            "Google-Abhängigkeiten fehlen. Installiere zuerst die requirements."
+            "Google dependencies are missing. Install the requirements first."
         ) from error
 
     credentials = None
@@ -126,7 +126,7 @@ def load_google_calendar(
         else:
             if not credentials_path.exists():
                 raise FileNotFoundError(
-                    f"Google-OAuth-Datei nicht gefunden: {credentials_path}"
+                    f"Google OAuth file not found: {credentials_path}"
                 )
             flow = InstalledAppFlow.from_client_secrets_file(str(credentials_path), SCOPES)
             credentials = flow.run_local_server(port=0)

@@ -111,6 +111,7 @@ class OptimizationReport(FrozenModel):
     alternatives: tuple[OptimizationVariant, ...] = ()
     hr_warnings: tuple[str, ...] = ()
     traffic_warnings: tuple[str, ...] = ()
+    human_recommendations: tuple[str, ...] = ()
     rejected_proposals: tuple[RejectedProposal, ...] = ()
     notes: tuple[str, ...] = ()
 
@@ -244,13 +245,13 @@ class WeeklyCalendar(FrozenModel):
     def validate_proposal(self, proposal: MoveProposal) -> str | None:
         event = self.event_by_id(proposal.event_id)
         if event is None:
-            return "Unbekannter Termin."
+            return "Unknown event."
         if event.all_day:
-            return "Ganztägige Termine werden nicht verschoben."
+            return "All-day events are not moved."
         if (proposal.new_end - proposal.new_start) != (event.end - event.start):
-            return "Die Termindauer darf nicht verändert werden."
+            return "The event duration must not be changed."
         if proposal.new_start < self.start or proposal.new_end > self.end:
-            return "Der Vorschlag liegt außerhalb der betrachteten Woche."
+            return "The proposal lies outside the considered week."
         local_start = proposal.new_start.astimezone(self.zone)
         local_end = proposal.new_end.astimezone(self.zone)
         if (
@@ -258,14 +259,14 @@ class WeeklyCalendar(FrozenModel):
             or local_start.time() < self.day_start
             or local_end.time() > self.day_end
         ):
-            return "Der Vorschlag liegt außerhalb des konfigurierten Tagesfensters."
+            return "The proposal lies outside the configured day window."
         conflicts = self.conflict_ids(
             proposal.new_start,
             proposal.new_end,
             exclude_event_id=proposal.event_id,
         )
         if conflicts:
-            return f"Der Vorschlag kollidiert mit: {', '.join(conflicts)}."
+            return f"The proposal collides with: {', '.join(conflicts)}."
         return None
 
     def with_move(self, proposal: MoveProposal) -> WeeklyCalendar:
@@ -290,6 +291,155 @@ class WeeklyCalendar(FrozenModel):
             calendar = calendar.with_move(proposal)
         return calendar
 
+    def build_conflict_resolution_variants(
+        self,
+        max_variants: int = 3,
+    ) -> tuple[OptimizationVariant, ...]:
+        """Build distinct deterministic variants that resolve existing overlaps."""
+
+        conflicts = self.conflict_pairs()
+        if not conflicts:
+            return ()
+
+        first_id, second_id = conflicts[0]
+        conflict_event_ids = (second_id, first_id)
+        candidates: list[tuple[float, OptimizationVariant]] = []
+        seen: set[tuple[tuple[str, datetime, datetime], ...]] = set()
+
+        for event_id in conflict_event_ids:
+            event = self.event_by_id(event_id)
+            other = self.event_by_id(first_id if event_id == second_id else second_id)
+            if event is None:
+                continue
+
+            move_candidates = self._move_candidates(event, limit=max_variants + 2)
+            for new_start in move_candidates:
+                proposal = MoveProposal(
+                    event_id=event.id,
+                    new_start=new_start,
+                    new_end=new_start + timedelta(minutes=event.duration_minutes),
+                    reason=(
+                        "Resolve overlap"
+                        + (f" with {other.title}" if other else "")
+                        + " while keeping the event duration unchanged."
+                    ),
+                    flexibility=Flexibility.UNCERTAIN,
+                    confidence=0.5,
+                )
+                if self.validate_proposal(proposal):
+                    continue
+
+                proposals = [proposal]
+                calendar = self.with_move(proposal)
+                if calendar.conflict_pairs():
+                    tail = calendar.build_conflict_resolution_variant()
+                    proposals.extend(tail.proposals)
+
+                variant = OptimizationVariant(
+                    name=self._resolution_variant_name(event, new_start),
+                    summary=self._resolution_variant_summary(event, new_start),
+                    proposals=tuple(proposals),
+                )
+                if self.apply_variant(variant).conflict_pairs():
+                    continue
+
+                key = tuple(
+                    (item.event_id, item.new_start, item.new_end)
+                    for item in variant.proposals
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                score = abs((new_start - event.start).total_seconds())
+                candidates.append((score, variant))
+
+        selected: list[OptimizationVariant] = []
+        selected_keys: set[tuple[tuple[str, datetime, datetime], ...]] = set()
+        moved_event_ids: set[str] = set()
+        sorted_candidates = [
+            variant
+            for _, variant in sorted(candidates, key=lambda item: item[0])
+        ]
+
+        for variant in sorted_candidates:
+            moved_event_id = variant.proposals[0].event_id if variant.proposals else ""
+            if not moved_event_id or moved_event_id in moved_event_ids:
+                continue
+            selected.append(variant)
+            moved_event_ids.add(moved_event_id)
+            selected_keys.add(
+                tuple(
+                    (item.event_id, item.new_start, item.new_end)
+                    for item in variant.proposals
+                )
+            )
+            if len(selected) >= max_variants:
+                return tuple(selected)
+
+        for variant in sorted_candidates:
+            key = tuple(
+                (item.event_id, item.new_start, item.new_end)
+                for item in variant.proposals
+            )
+            if key in selected_keys:
+                continue
+            selected.append(variant)
+            selected_keys.add(key)
+            if len(selected) >= max_variants:
+                break
+
+        return tuple(selected)
+
+    def _move_candidates(
+        self,
+        event: CalendarEvent,
+        limit: int,
+    ) -> tuple[datetime, ...]:
+        duration = event.duration_minutes
+        candidates: list[datetime] = []
+        seen: set[datetime] = set()
+        for day_offset in range(7):
+            day = self.week_start + timedelta(days=day_offset)
+            for slot in self.free_slots_excluding(
+                day,
+                minimum_minutes=duration,
+                exclude_event_id=event.id,
+            ):
+                starts = [slot.start]
+                latest_start = slot.end - timedelta(minutes=duration)
+                if latest_start != slot.start:
+                    starts.append(latest_start)
+                for start in starts:
+                    if start == event.start or start in seen:
+                        continue
+                    seen.add(start)
+                    candidates.append(start)
+
+        candidates.sort(key=lambda item: abs((item - event.start).total_seconds()))
+        return tuple(candidates[:limit])
+
+    def _resolution_variant_name(
+        self,
+        event: CalendarEvent,
+        new_start: datetime,
+    ) -> str:
+        local_start = new_start.astimezone(self.zone)
+        return f"Move {event.title} to {local_start.strftime('%a %H:%M')}"
+
+    def _resolution_variant_summary(
+        self,
+        event: CalendarEvent,
+        new_start: datetime,
+    ) -> str:
+        local_start = new_start.astimezone(self.zone)
+        local_end = (
+            new_start + timedelta(minutes=event.duration_minutes)
+        ).astimezone(self.zone)
+        return (
+            f"Moves {event.title} to {local_start.strftime('%A %H:%M')}-"
+            f"{local_end.strftime('%H:%M')} to remove the scheduling overlap."
+        )
+
     def build_conflict_resolution_variant(self) -> OptimizationVariant:
         """Deterministically propose moves until no timed event overlaps remain."""
 
@@ -298,12 +448,12 @@ class WeeklyCalendar(FrozenModel):
         max_moves = len(self.events)
         while calendar.conflict_pairs():
             if len(proposals) >= max_moves:
-                raise RuntimeError("Bestehende Terminkonflikte konnten nicht aufgelöst werden.")
+                raise RuntimeError("Existing scheduling conflicts could not be resolved.")
 
             first_id, second_id = calendar.conflict_pairs()[0]
             event = calendar.event_by_id(second_id)
             if event is None:
-                raise RuntimeError("Konflikt referenziert einen unbekannten Termin.")
+                raise RuntimeError("A conflict references an unknown event.")
 
             duration = event.duration_minutes
             candidates: list[TimeSlot] = []
@@ -321,7 +471,7 @@ class WeeklyCalendar(FrozenModel):
             )
             if not candidates:
                 raise RuntimeError(
-                    f"Kein konfliktfreier Zeitslot für Termin '{event.title}' verfügbar."
+                    f"No conflict-free time slot available for event '{event.title}'."
                 )
 
             slot = candidates[0]
@@ -329,7 +479,11 @@ class WeeklyCalendar(FrozenModel):
                 event_id=event.id,
                 new_start=slot.start,
                 new_end=slot.start + timedelta(minutes=duration),
-                reason=f"Bestehenden Terminkonflikt mit {first_id} auflösen.",
+                reason=(
+                    "Resolve existing scheduling conflict"
+                    + (f" with {self.event_by_id(first_id).title}" if self.event_by_id(first_id) else "")
+                    + "."
+                ),
                 flexibility=Flexibility.UNCERTAIN,
                 confidence=0.5,
             )
@@ -337,8 +491,8 @@ class WeeklyCalendar(FrozenModel):
             proposals.append(proposal)
 
         return OptimizationVariant(
-            name="Garantierte Konfliktauflösung",
-            summary="Deterministisch erzeugte Variante, die alle bestehenden Überschneidungen auflöst.",
+            name="Guaranteed conflict resolution",
+            summary="Deterministically generated variant that resolves all existing overlaps.",
             proposals=tuple(proposals),
         )
 
@@ -354,7 +508,7 @@ class WeeklyCalendar(FrozenModel):
                 rejected.append(
                     RejectedProposal(
                         proposal=proposal,
-                        reason="Ein Termin darf pro Variante nur einmal verschoben werden.",
+                        reason="An event may be moved only once per variant.",
                     )
                 )
                 continue

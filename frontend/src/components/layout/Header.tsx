@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAuthStatus, googleLoginUrl } from '../../api/client'
+import { getAuthStatus, googleLoginUrl, type AuthStatus } from '../../api/client'
 
 const NAV_ITEMS = [
   { id: 'calendar', label: 'Calendar' },
@@ -13,7 +13,7 @@ interface HeaderProps {
 }
 
 export function Header({ activePage, onNavigate }: HeaderProps) {
-  const [auth, setAuth] = useState<{ authenticated: boolean; has_calendar: boolean }>({
+  const [auth, setAuth] = useState<AuthStatus>({
     authenticated: false,
     has_calendar: false,
   })
@@ -46,9 +46,16 @@ export function Header({ activePage, onNavigate }: HeaderProps) {
       </div>
       <div className="flex items-center gap-3">
         {auth.authenticated ? (
-          <span className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
-            Google Connected
+          <span
+            className="text-sm text-green-600 dark:text-green-400 flex items-center gap-1"
+            title={auth.import_error ? `Import warning: ${auth.import_error}` : undefined}
+          >
+            <span
+              className={`w-2 h-2 rounded-full inline-block ${
+                auth.import_error ? 'bg-amber-500' : 'bg-green-500'
+              }`}
+            />
+            {auth.import_error ? 'Connected (import failed)' : 'Google Connected'}
           </span>
         ) : (
           <a

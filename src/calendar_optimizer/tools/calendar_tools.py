@@ -20,16 +20,16 @@ def transition_buffer_minutes(first_location: str, second_location: str) -> tupl
     """Return the conservative transition buffer and confidence label."""
 
     if not first_location or not second_location:
-        return 15, "niedrig"
+        return 15, "low"
     first_virtual = _is_virtual(first_location)
     second_virtual = _is_virtual(second_location)
     if first_virtual != second_virtual:
-        return 20, "mittel"
+        return 20, "medium"
     if first_virtual and second_virtual:
-        return 0, "hoch"
+        return 0, "high"
     if first_location.strip().casefold() == second_location.strip().casefold():
-        return 0, "hoch"
-    return 30, "mittel"
+        return 0, "high"
+    return 30, "medium"
 
 
 def analyze_transitions(calendar: WeeklyCalendar) -> list[dict[str, Any]]:

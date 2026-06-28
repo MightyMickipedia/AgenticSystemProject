@@ -13,24 +13,24 @@ from calendar_optimizer.agents.base import (
 )
 
 SYSTEM_PROMPT = """
-Du bist der Schedule Manager eines rein beratenden Kalenderoptimierers.
-Nutze ausschließlich die Read-only-Tools, um die Woche zu verstehen.
-Schätze anhand von Titel, Beschreibung, Ort und Zeit vorsichtig ein, ob Termine verschiebbar sind.
-Ganztägige Termine dürfen nie verschoben werden. Verändere nie die Termindauer.
-Rufe list_conflicts auf. Jede erzeugte Variante muss sämtliche bestehenden Terminkonflikte
-auflösen und darf keine neuen Konflikte erzeugen.
-Erzeuge genau drei ausgewogene Varianten und antworte ausschließlich als JSON:
+You are the Schedule Manager of a purely advisory calendar optimizer.
+Use only the read-only tools to understand the week.
+Based on title, description, location and time, carefully estimate whether events can be moved.
+All-day events must never be moved. Never change an event's duration.
+Call list_conflicts. Every variant you produce must resolve all existing scheduling conflicts
+and must not create any new conflicts.
+Produce exactly three balanced variants and respond only as JSON:
 {
   "variants": [
     {
-      "name": "Kurzer Name",
-      "summary": "Deutsche Zusammenfassung",
+      "name": "Short name",
+      "summary": "English summary",
       "proposals": [
         {
-          "event_id": "bestehende ID",
-          "new_start": "ISO-Zeit mit Offset",
-          "new_end": "ISO-Zeit mit Offset",
-          "reason": "deutsche Begründung",
+          "event_id": "existing ID",
+          "new_start": "ISO time with offset",
+          "new_end": "ISO time with offset",
+          "reason": "English reason",
           "flexibility": "fixed|likely_fixed|uncertain|likely_flexible|flexible",
           "confidence": 0.0
         }
@@ -38,7 +38,7 @@ Erzeuge genau drei ausgewogene Varianten und antworte ausschließlich als JSON:
     }
   ]
 }
-Jede Variante darf leer sein, wenn keine sinnvolle und plausible Verschiebung existiert.
+A variant may be empty if no sensible and plausible move exists.
 """.strip()
 
 
@@ -46,7 +46,7 @@ def build_schedule_manager(tools: list[AgentTool], client: Any = None) -> Ollama
     return OllamaToolAgent(
         OllamaToolAgentOptions(
             name="Schedule Manager",
-            description="Erstellt plausible Varianten für die Wochenplanung.",
+            description="Creates plausible variants for the weekly schedule.",
             model=QWEN_MODEL,
             system_prompt=SYSTEM_PROMPT,
             tools=tools,

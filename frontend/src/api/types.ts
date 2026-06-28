@@ -53,6 +53,7 @@ export interface OptimizationReport {
   alternatives: OptimizationVariant[]
   hr_warnings: string[]
   traffic_warnings: string[]
+  human_recommendations: string[]
   rejected_proposals: RejectedProposal[]
   notes: string[]
 }

@@ -32,5 +32,5 @@ def load_calendar_snapshot(path: Path) -> WeeklyCalendar:
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema_version") != SNAPSHOT_SCHEMA_VERSION:
-        raise ValueError("Nicht unterstützte Kalender-Snapshot-Version.")
+        raise ValueError("Unsupported calendar snapshot version.")
     return WeeklyCalendar.model_validate(payload["calendar"])

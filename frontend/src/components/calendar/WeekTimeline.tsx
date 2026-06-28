@@ -9,9 +9,13 @@ function parseTimeToHour(t: string): number {
 }
 
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr + 'T00:00:00')
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + days)
+  return [
+    dt.getFullYear(),
+    String(dt.getMonth() + 1).padStart(2, '0'),
+    String(dt.getDate()).padStart(2, '0'),
+  ].join('-')
 }
 
 interface WeekTimelineProps {
@@ -31,12 +35,13 @@ export function WeekTimeline({ calendar, variant }: WeekTimelineProps) {
     const map: Record<string, CalendarEvent[]> = {}
     for (const d of days) map[d] = []
     for (const e of calendar.events) {
+      const es = new Date(e.start).getTime()
+      const ee = new Date(e.end).getTime()
       for (const d of days) {
-        const dayStart = d + 'T00:00:00'
-        const dayEnd = addDays(d, 1) + 'T00:00:00'
-        if (e.start < dayEnd && e.end > dayStart) {
-          map[d].push(e)
-        }
+        const [y, mo, dy] = d.split('-').map(Number)
+        const ds = new Date(y, mo - 1, dy).getTime()
+        const de = new Date(y, mo - 1, dy + 1).getTime()
+        if (es < de && ee > ds) map[d].push(e)
       }
     }
     return map
@@ -55,12 +60,13 @@ export function WeekTimeline({ calendar, variant }: WeekTimelineProps) {
         start: p.new_start,
         end: p.new_end,
       }
+      const ps = new Date(proposed.start).getTime()
+      const pe = new Date(proposed.end).getTime()
       for (const d of days) {
-        const dayStartStr = d + 'T00:00:00'
-        const dayEndStr = addDays(d, 1) + 'T00:00:00'
-        if (proposed.start < dayEndStr && proposed.end > dayStartStr) {
-          map[d].push(proposed)
-        }
+        const [y, mo, dy] = d.split('-').map(Number)
+        const ds = new Date(y, mo - 1, dy).getTime()
+        const de = new Date(y, mo - 1, dy + 1).getTime()
+        if (ps < de && pe > ds) map[d].push(proposed)
       }
     }
     return map

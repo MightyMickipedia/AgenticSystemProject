@@ -46,6 +46,20 @@ async def upload_calendar(
         today = datetime.now(ZoneInfo(timezone)).date()
         ws = today - timedelta(days=today.weekday())
 
+        # Auto-detect: if the file's events are mostly in a different week, use that week.
+        raw_events = payload.get("events", [])
+        if raw_events:
+            mondays: dict[date, int] = {}
+            for item in raw_events:
+                try:
+                    dt = datetime.fromisoformat(str(item.get("start", "")))
+                    monday = dt.date() - timedelta(days=dt.date().weekday())
+                    mondays[monday] = mondays.get(monday, 0) + 1
+                except (ValueError, TypeError, AttributeError):
+                    pass
+            if mondays:
+                ws = max(mondays, key=lambda m: mondays[m])
+
     ds = time.fromisoformat(day_start)
     de = time.fromisoformat(day_end)
 

@@ -12,8 +12,14 @@ function isVirtual(location: string): boolean {
   return ['zoom', 'meet', 'teams', 'online', 'virtual'].some((t) => l.includes(t))
 }
 
+function timeMinutes(iso: string): number {
+  const m = iso.match(/T(\d{2}):(\d{2})/)
+  return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : 0
+}
+
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+  const m = iso.match(/T(\d{2}):(\d{2})/)
+  return m ? `${m[1]}:${m[2]}` : ''
 }
 
 interface EventBlockProps {
@@ -26,10 +32,8 @@ interface EventBlockProps {
 export function EventBlock({ event, dayStart, dayEnd, variant = 'default' }: EventBlockProps) {
   if (event.all_day) return null
 
-  const start = new Date(event.start)
-  const end = new Date(event.end)
-  const startMinutes = start.getHours() * 60 + start.getMinutes()
-  const endMinutes = end.getHours() * 60 + end.getMinutes()
+  const startMinutes = timeMinutes(event.start)
+  const endMinutes = timeMinutes(event.end)
   const totalMinutes = (dayEnd - dayStart) * 60
 
   const top = ((startMinutes - dayStart * 60) / totalMinutes) * 100

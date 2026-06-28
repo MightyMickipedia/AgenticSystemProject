@@ -12,10 +12,10 @@ from calendar_optimizer.tools.calendar_tools import (
 
 
 def test_transition_heuristics() -> None:
-    assert transition_buffer_minutes("", "Campus") == (15, "niedrig")
-    assert transition_buffer_minutes("Campus", "Google Meet") == (20, "mittel")
-    assert transition_buffer_minutes("Campus A", "Campus B") == (30, "mittel")
-    assert transition_buffer_minutes("Zoom", "Google Meet") == (0, "hoch")
+    assert transition_buffer_minutes("", "Campus") == (15, "low")
+    assert transition_buffer_minutes("Campus", "Google Meet") == (20, "medium")
+    assert transition_buffer_minutes("Campus A", "Campus B") == (30, "medium")
+    assert transition_buffer_minutes("Zoom", "Google Meet") == (0, "high")
 
 
 def test_analyze_transitions_detects_short_buffer(calendar: WeeklyCalendar) -> None:

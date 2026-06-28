@@ -13,11 +13,11 @@ from calendar_optimizer.agents.base import (
 )
 
 SYSTEM_PROMPT = """
-Du bewertest Ortswechsel und Übergangspuffer einer Kalenderwoche.
-Nutze die bereitgestellten Read-only-Tools und keine externen Maps-Dienste.
-Die Heuristik ist konservativ: unbekannter Ort 15 Minuten, physisch/virtuell 20 Minuten,
-verschiedene physische Orte 30 Minuten. Nimm keine Kalenderänderungen vor.
-Antworte ausschließlich als JSON: {"warnings": ["deutsche Warnung", "..."]}.
+You assess location changes and transition buffers of a calendar week.
+Use the provided read-only tools and no external map services.
+The heuristic is conservative: unknown location 15 minutes, physical/virtual 20 minutes,
+different physical locations 30 minutes. Do not make any calendar changes.
+Respond only as JSON: {"warnings": ["English warning", "..."]}.
 """.strip()
 
 
@@ -25,7 +25,7 @@ def build_traffic_optimizer(tools: list[AgentTool], client: Any = None) -> Ollam
     return OllamaToolAgent(
         OllamaToolAgentOptions(
             name="Traffic Optimizer",
-            description="Bewertet Übergangs- und Reisezeitpuffer heuristisch.",
+            description="Heuristically assesses transition and travel-time buffers.",
             model=LLAMA_MODEL,
             system_prompt=SYSTEM_PROMPT,
             tools=tools,

@@ -33,8 +33,8 @@ export function OptimizePanel({ hasCalendar }: OptimizePanelProps) {
           }
         },
       })
-    } catch (e: any) {
-      setError(e.message || 'Failed to start optimization')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to start optimization')
     }
   }, [reset, setStatus, setError, addFlowMessage, setReport, setCalendar])
 

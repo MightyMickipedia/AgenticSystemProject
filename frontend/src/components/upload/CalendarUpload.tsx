@@ -18,8 +18,8 @@ export function CalendarUpload({ onLoaded }: CalendarUploadProps) {
       try {
         const cal = await uploadCalendar(file)
         onLoaded(cal)
-      } catch (e: any) {
-        setError(e.message || 'Upload failed')
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Upload failed')
       } finally {
         setLoading(false)
       }
@@ -43,8 +43,8 @@ export function CalendarUpload({ onLoaded }: CalendarUploadProps) {
     try {
       const cal = await loadSnapshot()
       onLoaded(cal)
-    } catch (e: any) {
-      setError(e.message || 'Failed to load snapshot')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load snapshot')
     } finally {
       setLoading(false)
     }

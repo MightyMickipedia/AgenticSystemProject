@@ -42,6 +42,27 @@ export function ReportViewer({ report, calendar }: ReportViewerProps) {
         />
       </div>
 
+      <div>
+        <h3 className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+          Human Recommendations
+        </h3>
+        {report.human_recommendations.length > 0 ? (
+          <div className="rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/10 p-3 space-y-2">
+            {report.human_recommendations.map((recommendation, i) => (
+              <div
+                key={i}
+                className="text-sm text-emerald-800 dark:text-emerald-300 flex items-start gap-2"
+              >
+                <span className="text-emerald-500 mt-0.5">&gt;</span>
+                <span>{recommendation}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">No additional recommendations.</p>
+        )}
+      </div>
+
       {report.alternatives.length > 0 && (
         <div>
           <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-3">

@@ -56,27 +56,27 @@ def test_free_slots_ignore_all_day_events(calendar: WeeklyCalendar) -> None:
     [
         (
             proposal("missing", "2026-06-08T13:00:00+02:00", "2026-06-08T14:00:00+02:00"),
-            "Unbekannter",
+            "Unknown",
         ),
         (
             proposal("all-day", "2026-06-10T08:00:00+02:00", "2026-06-11T08:00:00+02:00"),
-            "Ganztägige",
+            "All-day",
         ),
         (
             proposal("meeting", "2026-06-08T13:00:00+02:00", "2026-06-08T15:00:00+02:00"),
-            "Termindauer",
+            "duration",
         ),
         (
             proposal("meeting", "2026-06-08T11:30:00+02:00", "2026-06-08T12:30:00+02:00"),
-            "kollidiert",
+            "collides",
         ),
         (
             proposal("meeting", "2026-06-15T10:00:00+02:00", "2026-06-15T11:00:00+02:00"),
-            "außerhalb",
+            "outside",
         ),
         (
             proposal("meeting", "2026-06-08T22:00:00+02:00", "2026-06-08T23:00:00+02:00"),
-            "Tagesfensters",
+            "day window",
         ),
     ],
 )
@@ -121,7 +121,7 @@ def test_variant_rejects_duplicate_move(calendar: WeeklyCalendar) -> None:
         OptimizationVariant(name="Test", summary="Test", proposals=(first, second))
     )
     assert variant.proposals == (first,)
-    assert "nur einmal" in rejected[0].reason
+    assert "only once" in rejected[0].reason
 
 
 def test_conflict_resolution_variant_is_guaranteed_conflict_free() -> None:

@@ -44,7 +44,13 @@ export async function startOptimization(): Promise<{ optimize_id: string }> {
   return request<{ optimize_id: string }>('/optimize/start', { method: 'POST' })
 }
 
-export async function getAuthStatus(): Promise<{ authenticated: boolean; has_calendar: boolean }> {
+export interface AuthStatus {
+  authenticated: boolean
+  has_calendar: boolean
+  import_error?: string | null
+}
+
+export async function getAuthStatus(): Promise<AuthStatus> {
   return request('/auth/status')
 }
 

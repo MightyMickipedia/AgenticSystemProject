@@ -13,11 +13,11 @@ from calendar_optimizer.agents.base import (
 )
 
 SYSTEM_PROMPT = """
-Du bewertest die menschliche Machbarkeit einer Kalenderwoche.
-Prüfe mit den Read-only-Tools insbesondere Pausen, Mahlzeiten, mentale und körperliche Belastung,
-zu lange Terminserien und unrealistische Häufungen. Nimm keine Kalenderänderungen vor.
-Antworte ausschließlich als JSON: {"warnings": ["deutsche Warnung", "..."]}.
-Nenne nur konkrete, aus dem Kalender ableitbare Warnungen.
+You assess the human feasibility of a calendar week.
+Using the read-only tools, check in particular breaks, meals, mental and physical load,
+overly long back-to-back series and unrealistic clustering. Do not make any calendar changes.
+Respond only as JSON: {"warnings": ["English warning", "..."]}.
+Name only concrete warnings that can be derived from the calendar.
 """.strip()
 
 
@@ -25,7 +25,7 @@ def build_hr_planner(tools: list[AgentTool], client: Any = None) -> OllamaToolAg
     return OllamaToolAgent(
         OllamaToolAgentOptions(
             name="HR Planner",
-            description="Bewertet Pausen, Belastung und menschliche Machbarkeit.",
+            description="Assesses breaks, workload and human feasibility.",
             model=LLAMA_MODEL,
             system_prompt=SYSTEM_PROMPT,
             tools=tools,

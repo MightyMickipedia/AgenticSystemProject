@@ -29,14 +29,14 @@ def _parse_time(value: str) -> time:
     try:
         return time.fromisoformat(value)
     except ValueError as error:
-        raise argparse.ArgumentTypeError("Erwartetes Zeitformat: HH:MM") from error
+        raise argparse.ArgumentTypeError("Expected time format: HH:MM") from error
 
 
 def _parse_week_start(value: str | None, timezone: str) -> date:
     if value:
         selected = date.fromisoformat(value)
         if selected.weekday() != 0:
-            raise ValueError("--week-start muss ein Montag sein.")
+            raise ValueError("--week-start must be a Monday.")
         return selected
     today = datetime.now(ZoneInfo(timezone)).date()
     return today - timedelta(days=today.weekday())
@@ -44,16 +44,16 @@ def _parse_week_start(value: str | None, timezone: str) -> date:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Optimiert eine Kalenderwoche beratend mit lokalen Ollama-Agenten."
+        description="Advisory optimization of a calendar week using local Ollama agents."
     )
     parser.add_argument("--source", choices=("google", "json", "snapshot"), default="google")
     parser.add_argument("--input-json", type=Path)
     parser.add_argument("--calendar-id", default="primary")
-    parser.add_argument("--week-start", help="Montag im ISO-Format, z. B. 2026-06-08")
+    parser.add_argument("--week-start", help="Monday in ISO format, e.g. 2026-06-08")
     parser.add_argument(
         "--timezone",
         default=os.environ.get("CALENDAR_TIMEZONE", "Europe/Berlin"),
-        help="IANA-Zeitzone; Standard: CALENDAR_TIMEZONE oder Europe/Berlin",
+        help="IANA timezone; default: CALENDAR_TIMEZONE or Europe/Berlin",
     )
     parser.add_argument(
         "--credentials",
@@ -79,10 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
 def load_calendar_source(args: argparse.Namespace, week_start: date) -> WeeklyCalendar:
     """Load the configured source and use a snapshot when Google import fails."""
 
-    print(f"[FLOW] Kalenderquelle '{args.source}' wird geladen", flush=True)
+    print(f"[FLOW] Loading calendar source '{args.source}'", flush=True)
     if args.source == "json":
         if args.input_json is None:
-            raise ValueError("--input-json ist für --source json erforderlich.")
+            raise ValueError("--input-json is required for --source json.")
         return load_json_calendar(
             args.input_json,
             week_start,
@@ -92,7 +92,7 @@ def load_calendar_source(args: argparse.Namespace, week_start: date) -> WeeklyCa
         )
     if args.source == "snapshot":
         calendar = load_calendar_snapshot(args.snapshot)
-        print(f"[FLOW] Kalender-Snapshot geladen: {args.snapshot}", flush=True)
+        print(f"[FLOW] Calendar snapshot loaded: {args.snapshot}", flush=True)
         return calendar
 
     try:
@@ -108,23 +108,23 @@ def load_calendar_source(args: argparse.Namespace, week_start: date) -> WeeklyCa
     except Exception as error:
         if not args.snapshot.exists():
             raise RuntimeError(
-                f"Google-Import fehlgeschlagen und kein Snapshot vorhanden: {error}"
+                f"Google import failed and no snapshot available: {error}"
             ) from error
-        print(f"[FLOW] Google-Import fehlgeschlagen: {error}", flush=True)
+        print(f"[FLOW] Google import failed: {error}", flush=True)
         print(
-            f"[FLOW] Authentifizierungs-Fallback -> Snapshot: {args.snapshot}",
+            f"[FLOW] Authentication fallback -> snapshot: {args.snapshot}",
             flush=True,
         )
         return load_calendar_snapshot(args.snapshot)
 
     if args.snapshot.exists():
         print(
-            f"[FLOW] Bestehender Kalender-Snapshot bleibt unverändert: {args.snapshot}",
+            f"[FLOW] Existing calendar snapshot remains unchanged: {args.snapshot}",
             flush=True,
         )
     else:
         save_calendar_snapshot(calendar, args.snapshot)
-        print(f"[FLOW] Kalender-Snapshot einmalig gespeichert: {args.snapshot}", flush=True)
+        print(f"[FLOW] Calendar snapshot saved once: {args.snapshot}", flush=True)
     return calendar
 
 
@@ -134,19 +134,19 @@ async def optimize(args: argparse.Namespace) -> Path:
 
     week_start = calendar.week_start
     print(
-        f"[FLOW] Kalender geladen: {len(calendar.events)} Termine, "
-        f"Woche ab {calendar.week_start.isoformat()}",
+        f"[FLOW] Calendar loaded: {len(calendar.events)} events, "
+        f"week starting {calendar.week_start.isoformat()}",
         flush=True,
     )
     squad, orchestrator = build_agent_squad(calendar)
     await squad.route_request(
-        user_input="Optimiere diese Kalenderwoche ausgewogen.",
+        user_input="Optimize this calendar week in a balanced way.",
         user_id="local-user",
         session_id=f"week-{week_start.isoformat()}",
     )
     if orchestrator.last_report is None:
         raise RuntimeError(
-            "Die Optimierung ist fehlgeschlagen. Prüfe, ob Ollama läuft und beide Modelle vorhanden sind."
+            "The optimization failed. Check that Ollama is running and both models are available."
         )
 
     output = args.output or PROJECT_ROOT / "reports" / f"week-{week_start.isoformat()}.md"
@@ -164,10 +164,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         output = asyncio.run(optimize(args))
     except Exception as error:
-        print(f"Fehler: {error}", file=sys.stderr)
+        print(f"Error: {error}", file=sys.stderr)
         return 1
-    print(f"Report erstellt: {output.resolve()}")
-    print("Es wurden keine Änderungen am Kalender vorgenommen.")
+    print(f"Report created: {output.resolve()}")
+    print("No changes were made to the calendar.")
     return 0
 
 

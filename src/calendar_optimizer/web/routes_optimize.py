@@ -74,7 +74,7 @@ async def optimization_websocket(websocket: WebSocket, optimize_id: str) -> None
         try:
             squad, orchestrator = build_agent_squad(calendar)
             await squad.route_request(
-                user_input="Optimiere diese Kalenderwoche ausgewogen.",
+                user_input="Optimize this calendar week in a balanced way.",
                 user_id="web-user",
                 session_id=f"week-{calendar.week_start.isoformat()}",
             )

@@ -38,13 +38,13 @@ class OllamaToolAgent(Agent):
         super().__init__(options)
         if options.model not in ALLOWED_MODELS:
             raise ValueError(
-                f"Model '{options.model}' ist nicht erlaubt. Erlaubt: {sorted(ALLOWED_MODELS)}"
+                f"Model '{options.model}' is not allowed. Allowed: {sorted(ALLOWED_MODELS)}"
             )
         if options.client is None:
             try:
                 from openai import AsyncOpenAI
             except ImportError as error:
-                raise RuntimeError("Die Abhängigkeit 'openai' ist nicht installiert.") from error
+                raise RuntimeError("The 'openai' dependency is not installed.") from error
             self.client = AsyncOpenAI(base_url=options.base_url, api_key="ollama")
         else:
             self.client = options.client
@@ -65,15 +65,15 @@ class OllamaToolAgent(Agent):
         flow(f"{self.name} -> Tool {name}: {summarize_arguments(arguments or '{}')}")
         tool = next((candidate for candidate in self.tools if candidate.name == name), None)
         if tool is None:
-            flow(f"Tool {name} -> {self.name}: Tool nicht gefunden")
-            return json.dumps({"error": f"Unbekanntes Tool: {name}"})
+            flow(f"Tool {name} -> {self.name}: tool not found")
+            return json.dumps({"error": f"Unknown tool: {name}"})
         try:
             values = json.loads(arguments or "{}")
             result = await tool.func(**values)
-            flow(f"Tool {name} -> {self.name}: Ergebnis erhalten")
+            flow(f"Tool {name} -> {self.name}: result received")
             return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
         except Exception as error:  # Tool errors must be visible to the model.
-            flow(f"Tool {name} -> {self.name}: Fehler: {error}")
+            flow(f"Tool {name} -> {self.name}: error: {error}")
             return json.dumps({"error": str(error)}, ensure_ascii=False)
 
     async def process_request(
@@ -85,7 +85,7 @@ class OllamaToolAgent(Agent):
         additional_params: Optional[dict[str, Any]] = None,
     ) -> ConversationMessage:
         del user_id, session_id, additional_params
-        flow(f"{self.name} arbeitet mit {self.model}")
+        flow(f"{self.name} working with {self.model}")
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": self.system_prompt},
             *(self._history_message(message) for message in chat_history),
@@ -106,12 +106,12 @@ class OllamaToolAgent(Agent):
 
             response = await self.client.chat.completions.create(**request)
             if not response.choices:
-                raise RuntimeError(f"{self.name} lieferte keine Antwort.")
+                raise RuntimeError(f"{self.name} returned no response.")
             message = response.choices[0].message
             tool_calls = message.tool_calls or []
             if not tool_calls:
                 content = message.content or ""
-                flow(f"{self.name} hat die Arbeit abgeschlossen")
+                flow(f"{self.name} finished its work")
                 return ConversationMessage(
                     role=ParticipantRole.ASSISTANT.value,
                     content=[{"text": content}],
@@ -139,4 +139,4 @@ class OllamaToolAgent(Agent):
                     }
                 )
 
-        raise RuntimeError(f"{self.name} überschritt das Tool-Aufruflimit.")
+        raise RuntimeError(f"{self.name} exceeded the tool-call limit.")
